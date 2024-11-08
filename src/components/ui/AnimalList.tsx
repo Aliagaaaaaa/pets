@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './card';
 import { Button } from './button';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink } from './pagination';
 import { Avatar, AvatarFallback, AvatarImage } from './avatar';
 import { Badge } from './badge';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
 
 interface Animal {
   id: number;
@@ -34,34 +35,65 @@ interface ApiResponse {
   };
 }
 
+const allRegions = [
+  "Arica y Parinacota", "Tarapacá", "Antofagasta", "Atacama", "Coquimbo",
+  "Valparaíso", "RM", "O'Higgins", "Maule", "Ñuble", "Biobío",
+  "La Araucanía", "Los Ríos", "Los Lagos", "Aisén",
+  "Magallanes y Antártica Chilena"
+];
+
+const ITEMS_PER_PAGE = 20;
+
 export default function AnimalList() {
-  const [animals, setAnimals] = useState<Animal[]>([]);
+  const [allAnimals, setAllAnimals] = useState<Animal[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<string>('all');
 
   useEffect(() => {
-    fetchAnimals(currentPage);
-  }, [currentPage]);
+    fetchAllAnimals();
+  }, []);
 
-  const fetchAnimals = async (page: number) => {
+  const fetchAllAnimals = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`https://huachitos.cl/api/animales?page=${page}`);
+      const response = await fetch('https://huachitos.cl/api/animales?per_page=1000');
       if (!response.ok) {
         throw new Error('Failed to fetch animals');
       }
       const data: ApiResponse = await response.json();
-      setAnimals(data.data);
-      setTotalPages(data.meta.last_page);
+      setAllAnimals(data.data);
     } catch (err) {
       setError('Error fetching animals. Please try again later.');
       console.error('Error fetching animals:', err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const filteredAnimals = useMemo(() => {
+    return selectedRegion === 'all'
+      ? allAnimals
+      : allAnimals.filter(animal => animal.region === selectedRegion);
+  }, [allAnimals, selectedRegion]);
+
+  const availableRegions = useMemo(() => {
+    const regions = new Set(allAnimals.map(animal => animal.region));
+    return allRegions.filter(region => regions.has(region));
+  }, [allAnimals]);
+
+  const totalPages = Math.ceil(filteredAnimals.length / ITEMS_PER_PAGE);
+
+  const currentAnimals = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredAnimals.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredAnimals, currentPage]);
+
+  const handleRegionChange = (value: string) => {
+    setSelectedRegion(value);
+    setCurrentPage(1);
   };
 
   if (isLoading) {
@@ -75,8 +107,23 @@ export default function AnimalList() {
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-3xl font-bold mb-6">Animales en Adopción</h1>
+      <div className="mb-4">
+        <Select onValueChange={handleRegionChange} value={selectedRegion}>
+          <SelectTrigger className="w-[280px]">
+            <SelectValue placeholder="Selecciona una región" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas las regiones</SelectItem>
+            {availableRegions.map((region) => (
+              <SelectItem key={region} value={region}>
+                {region}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {animals.map((animal) => (
+        {currentAnimals.map((animal) => (
           <Card key={animal.id} className="flex flex-col">
             <CardHeader>
               <CardTitle>{animal.nombre}</CardTitle>
